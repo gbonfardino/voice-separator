@@ -7,22 +7,20 @@ import shutil
 
 app = Flask(__name__)
 
-# Directory temporanea per i file
 TEMP_DIR = '/tmp/voice-separator'
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 @app.route('/separate-voice', methods=['POST'])
 def separate_voice():
     """
-    Separa la voce da un video/audio.
+    Separa la voce da un video/audio usando Demucs.
     
     Input JSON:
     - video: base64 del video/audio
-    - format: formato output (mp3, wav, ogg) - default: mp3
     - input_ext: estensione input (mp4, mkv, wav, mp3) - default: mp4
     
     Output JSON:
-    - vocals: base64 della traccia vocale isolata
+    - vocals: base64 della traccia vocale isolata (wav)
     - success: true/false
     """
     try:
@@ -32,17 +30,15 @@ def separate_voice():
             return jsonify({'error': 'video base64 required', 'success': False}), 400
         
         video_b64 = data['video']
-        output_format = data.get('format', 'mp3')
         input_ext = data.get('input_ext', 'mp4')
         
-        # Genera ID unico per questa richiesta
         job_id = str(uuid.uuid4())
         job_dir = os.path.join(TEMP_DIR, job_id)
         os.makedirs(job_dir, exist_ok=True)
         
         input_file = os.path.join(job_dir, f'input.{input_ext}')
-        audio_raw = os.path.join(job_dir, 'audio_raw.wav')
-        output_dir = os.path.join(job_dir, 'output')
+        audio_file = os.path.join(job_dir, 'audio.wav')
+        output_dir = os.path.join(job_dir, 'separated')
         
         try:
             # 1. Salva il video input
@@ -53,11 +49,9 @@ def separate_voice():
             # 2. Estrai audio con FFmpeg
             ffmpeg_cmd = [
                 'ffmpeg', '-y', '-i', input_file,
-                '-vn',  # No video
-                '-acodec', 'pcm_s16le',  # PCM 16-bit
-                '-ar', '44100',  # 44.1kHz sample rate
-                '-ac', '2',  # Stereo
-                audio_raw
+                '-vn', '-acodec', 'pcm_s16le',
+                '-ar', '44100', '-ac', '2',
+                audio_file
             ]
             
             result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
@@ -67,32 +61,33 @@ def separate_voice():
                     'success': False
                 }), 500
             
-            # 3. Separa voce con audio-separator
-            separator_cmd = [
-                'audio-separator',
-                audio_raw,
-                '--model_filename', 'htdemucs_ft.yaml',  # Modello Demucs fine-tuned
-                '--output_dir', output_dir,
-                '--output_format', output_format
+            # 3. Separa con Demucs
+            demucs_cmd = [
+                'python', '-m', 'demucs',
+                '-n', 'htdemucs',  # modello
+                '-o', output_dir,
+                '--two-stems', 'vocals',  # solo vocals vs resto
+                audio_file
             ]
             
-            result = subprocess.run(separator_cmd, capture_output=True, text=True)
+            result = subprocess.run(demucs_cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 return jsonify({
-                    'error': f'Separation failed: {result.stderr}',
+                    'error': f'Demucs failed: {result.stderr}',
                     'success': False
                 }), 500
             
             # 4. Trova il file vocals
             vocals_file = None
-            for f in os.listdir(output_dir):
-                if 'vocals' in f.lower() or 'Vocals' in f:
-                    vocals_file = os.path.join(output_dir, f)
-                    break
+            for root, dirs, files in os.walk(output_dir):
+                for f in files:
+                    if 'vocals' in f.lower():
+                        vocals_file = os.path.join(root, f)
+                        break
             
             if not vocals_file or not os.path.exists(vocals_file):
                 return jsonify({
-                    'error': 'Vocals file not found in output',
+                    'error': 'Vocals file not found',
                     'success': False
                 }), 500
             
@@ -103,13 +98,12 @@ def separate_voice():
             
             return jsonify({
                 'vocals': vocals_b64,
-                'format': output_format,
-                'mimeType': f'audio/{output_format}',
+                'format': 'wav',
+                'mimeType': 'audio/wav',
                 'success': True
             })
             
         finally:
-            # Pulizia directory temporanea
             if os.path.exists(job_dir):
                 shutil.rmtree(job_dir, ignore_errors=True)
                 
@@ -122,23 +116,20 @@ def separate_voice():
 
 @app.route('/health', methods=['GET'])
 def health():
-    """Health check endpoint"""
     return jsonify({
         'status': 'ok',
         'service': 'voice-separator',
-        'model': 'htdemucs_ft'
+        'model': 'htdemucs'
     })
 
 
 @app.route('/', methods=['GET'])
 def info():
-    """Info endpoint"""
     return jsonify({
         'name': 'Voice Separator API',
         'version': '1.0.0',
-        'description': 'Isola la voce da video/audio usando AI (Demucs)',
         'endpoints': {
-            'POST /separate-voice': 'Separa voce (body: { video: base64, format?: mp3|wav|ogg, input_ext?: mp4|mkv|wav })',
+            'POST /separate-voice': 'Separa voce (body: { video: base64, input_ext?: mp4|mkv|wav })',
             'GET /health': 'Health check'
         }
     })

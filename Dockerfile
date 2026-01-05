@@ -1,20 +1,17 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
-# Installa FFmpeg e dipendenze sistema necessarie per audio-separator
+# Installa FFmpeg e dipendenze sistema
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copia requirements e installa dipendenze Python
 COPY requirements.txt .
 
-# Installa con pip più verboso per debug
+# Installa dipendenze python
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
@@ -22,4 +19,3 @@ COPY . .
 EXPOSE 5000
 
 CMD ["python", "app.py"]
-
