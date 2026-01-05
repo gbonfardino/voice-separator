@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  voice-separator:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+    volumes:
+      - /tmp/voice-separator:/tmp/voice-separator
+    restart: unless-stopped
+    # Limita memoria a 3GB (lascia spazio al sistema)
+    deploy:
+      resources:
+        limits:
+          memory: 2.5G
