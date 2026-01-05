@@ -1,23 +1,25 @@
 FROM python:3.11-slim
 
-# Installa FFmpeg e dipendenze sistema
+# Installa FFmpeg e dipendenze sistema necessarie per audio-separator
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copia requirements e installa dipendenze Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-scarica il modello Demucs (evita download al primo uso)
-RUN python -c "from audio_separator.separator import Separator; s = Separator(); s.load_model('htdemucs_ft.yaml')" || true
+# Installa con pip più verboso per debug
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 EXPOSE 5000
 
-# Usa gunicorn per produzione
 CMD ["python", "app.py"]
+
