@@ -77,11 +77,12 @@ def separate_voice():
                     'success': False
                 }), 500
             
-            # 4. Trova il file vocals
+            # 4. Trova il file vocals (escludi no_vocals)
             vocals_file = None
             for root, dirs, files in os.walk(output_dir):
                 for f in files:
-                    if 'vocals' in f.lower():
+                    # Cerca 'vocals' ma NON 'no_vocals'
+                    if 'vocals' in f.lower() and 'no_vocals' not in f.lower():
                         vocals_file = os.path.join(root, f)
                         break
             
