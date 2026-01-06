@@ -12,6 +12,9 @@ WORKDIR /app
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir torch==2.1.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cpu
 
+# Pin numpy<2 per compatibilità con torch 2.1
+RUN pip install --no-cache-dir "numpy<2"
+
 # Poi installa demucs e altre dipendenze
 RUN pip install --no-cache-dir demucs soundfile flask
 
